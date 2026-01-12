@@ -1136,7 +1136,7 @@ if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
                     <div style="flex: 1;">
                         <div style="font-weight: 700; font-size: 17px; margin-bottom: 8px; color: #1e293b; display: flex; justify-content: space-between; align-items:center;">
                             <span>欢迎回来，<?php echo htmlspecialchars($currentAdminUser); ?></span>
-                            <span style="font-size: 11px; background: #6366f1; color: white; padding: 4px 10px; border-radius: 20px; font-weight: 600; letter-spacing:0.5px;">V15.0 PRO</span>
+                            <span style="font-size: 11px; background: #6366f1; color: white; padding: 4px 10px; border-radius: 20px; font-weight: 600; letter-spacing:0.5px;">V26 PRO</span>
                         </div>
                         <div style="font-size: 14px; color: #475569; line-height: 1.6;">
                             系统当前运行状态良好，所有节点连接正常。<br>

@@ -54,10 +54,17 @@ if ($step == 3 && $_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         try {
             $dsn = "mysql:host=$host;port=$port;dbname=$name;charset=utf8mb4";
-            $pdo = new PDO($dsn, $user, $pass);
-            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            // [修复] 在构造函数中直接传入 ERRMODE_EXCEPTION，确保连接失败立即抛出异常
+            $pdo = new PDO($dsn, $user, $pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
             
             $secret = 'SYS_' . md5(uniqid('', true));
+            // [安全] 对写入 config 的变量进行转义，防止语法错误
+            $safe_host = addslashes($host);
+            $safe_name = addslashes($name);
+            $safe_user = addslashes($user);
+            $safe_pass = addslashes($pass);
+            $safe_port = addslashes($port);
+
             $config_content = "<?php
 // config.php - System Configuration
 // 此文件存在意味着系统已安装
@@ -70,11 +77,11 @@ header(\"X-Content-Type-Options: nosniff\");
 
 // 2. 数据库配置
 define('SYS_SECRET', '$secret');
-define('DB_HOST', '$host');
-define('DB_NAME', '$name');
-define('DB_USER', '$user');
-define('DB_PASS', '$pass');
-define('DB_PORT', '$port');
+define('DB_HOST', '$safe_host');
+define('DB_NAME', '$safe_name');
+define('DB_USER', '$safe_user');
+define('DB_PASS', '$safe_pass');
+define('DB_PORT', '$safe_port');
 
 // 3. 全局设置
 error_reporting(0);
@@ -115,7 +122,17 @@ define('CARD_TYPES', [
                 $step = 2; // 返回上一步
             }
         } catch (PDOException $e) {
-            $msg = "数据库连接失败: " . $e->getMessage();
+            $errorInfo = $e->getMessage();
+            // 友好的错误提示
+            if (strpos($errorInfo, 'getaddrinfo') !== false) {
+                $msg = "数据库连接失败: 无法解析主机 '{$host}'。请检查「数据库地址」是否正确（通常为 localhost 或 127.0.0.1，请勿填数据库名）。";
+            } elseif (strpos($errorInfo, 'Unknown database') !== false) {
+                $msg = "数据库连接失败: 数据库 '{$name}' 不存在，请先在数据库管理面板创建该数据库。";
+            } elseif (strpos($errorInfo, 'Access denied') !== false) {
+                $msg = "数据库连接失败: 用户名或密码错误。";
+            } else {
+                $msg = "数据库连接失败: " . $errorInfo;
+            }
             $msg_type = 'error';
             $step = 2; // 返回上一步
         }
@@ -255,13 +272,17 @@ $env_pass = !in_array(false, array_column($env_data, 'status'));
     <?php elseif ($step == 2): ?>
         <h2>数据库配置</h2>
         <form method="POST" action="?step=3">
-            <div class="form-group"><label>数据库地址</label><input type="text" name="db_host" value="localhost"></div>
+            <div class="form-group">
+                <label>数据库地址 (Host)</label>
+                <!-- [修复] 修改默认值为 127.0.0.1 避免 localhost 的 ipv6 解析问题，并明确 label 防止填错 -->
+                <input type="text" name="db_host" value="127.0.0.1" placeholder="例如: 127.0.0.1">
+            </div>
             <div class="form-group" style="display:flex;gap:15px;">
-                <div style="flex:1;"><label>数据库名</label><input type="text" name="db_name" required></div>
+                <div style="flex:1;"><label>数据库名 (Name)</label><input type="text" name="db_name" required placeholder="例如: keai"></div>
                 <div style="width:80px;"><label>端口</label><input type="text" name="db_port" value="3306"></div>
             </div>
-            <div class="form-group"><label>用户名</label><input type="text" name="db_user" required></div>
-            <div class="form-group"><label>密码</label><input type="password" name="db_pass" required></div>
+            <div class="form-group"><label>用户名 (User)</label><input type="text" name="db_user" required></div>
+            <div class="form-group"><label>密码 (Pass)</label><input type="password" name="db_pass" required></div>
             <button type="submit" class="btn-primary">立即安装</button>
         </form>
 
