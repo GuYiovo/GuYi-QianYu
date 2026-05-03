@@ -1,5 +1,5 @@
 <?php
-// database.php - 核心数据库类 (安全增强版 + 性能优化 + 修复筛选)
+// database.php - 核心数据库类 (安全增强版 + 性能优化 + 自动修补升级 + 完美迁移)
 require_once 'config.php';
 
 if (!class_exists('Database')) {
@@ -99,10 +99,35 @@ if (!class_exists('Database')) {
                 key_name VARCHAR(50) PRIMARY KEY,
                 value TEXT
             ) $tableOptions");
+
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS blacklists (
+                id INT AUTO_INCREMENT PRIMARY KEY, 
+                type VARCHAR(20) NOT NULL, 
+                value VARCHAR(100) NOT NULL UNIQUE, 
+                reason TEXT, 
+                create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_bl_type_value (type, value)
+            ) $tableOptions");
             
             if ($this->pdo->query("SELECT COUNT(*) FROM admin")->fetchColumn() == 0) {
                 $this->pdo->prepare("INSERT IGNORE INTO admin (id, username, password_hash) VALUES (1, 'GuYi', ?)")->execute([password_hash('admin123', PASSWORD_DEFAULT)]);
             }
+
+            try {
+                $checkCards = $this->pdo->query("SHOW COLUMNS FROM `cards` LIKE 'app_id'");
+                if ($checkCards->rowCount() == 0) {
+                    $this->pdo->exec("ALTER TABLE `cards` ADD `app_id` INT DEFAULT 0");
+                    $this->pdo->exec("ALTER TABLE `cards` ADD INDEX `idx_card_app` (`app_id`)");
+                }
+                $checkDevices = $this->pdo->query("SHOW COLUMNS FROM `active_devices` LIKE 'app_id'");
+                if ($checkDevices->rowCount() == 0) {
+                    $this->pdo->exec("ALTER TABLE `active_devices` ADD `app_id` INT DEFAULT 0");
+                }
+                $checkLogs = $this->pdo->query("SHOW COLUMNS FROM `usage_logs` LIKE 'app_name'");
+                if ($checkLogs->rowCount() == 0) {
+                    $this->pdo->exec("ALTER TABLE `usage_logs` ADD `app_name` VARCHAR(100) DEFAULT 'System'");
+                }
+            } catch (PDOException $e) {}
         }
 
         public function getSystemSettings() {
@@ -152,7 +177,10 @@ if (!class_exists('Database')) {
         public function toggleAppStatus($id) { $this->pdo->prepare("UPDATE applications SET status = CASE WHEN status = 1 THEN 0 ELSE 1 END WHERE id = ?")->execute([$id]); }
 
         public function deleteApp($id) {
-            $count = $this->pdo->query("SELECT COUNT(*) FROM cards WHERE app_id = $id")->fetchColumn();
+            $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM cards WHERE app_id = ?");
+            $stmt->execute([$id]);
+            $count = $stmt->fetchColumn();
+            
             if ($count > 0) throw new Exception("无法删除：该应用下仍有 {$count} 张卡密。");
             $this->pdo->prepare("DELETE FROM app_variables WHERE app_id = ?")->execute([$id]);
             $this->pdo->prepare("DELETE FROM applications WHERE id = ?")->execute([$id]);
@@ -193,16 +221,21 @@ if (!class_exists('Database')) {
             return $stmt->fetch(PDO::FETCH_ASSOC);
         }
 
-        // --- 核心验证 (优化版：概率清理过期设备) ---
         public function verifyCard($cardCode, $deviceHash, $appKey = null) {
-            // [性能修正] 不要每次请求都清理过期数据，改为 1% 概率触发
-            // 这可以显著减少高并发下的数据库写锁
             if (mt_rand(1, 100) === 1) {
                 $this->cleanupExpiredDevices();
             }
             
             $ip = $_SERVER['REMOTE_ADDR'] ?? 'Unknown'; 
             $ua = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown';
+
+            $blStmt = $this->pdo->prepare("SELECT reason FROM blacklists WHERE (type = 'ip' AND value = ?) OR (type = 'device' AND value = ?)");
+            $blStmt->execute([$ip, $deviceHash]);
+            $blRecord = $blStmt->fetch(PDO::FETCH_ASSOC);
+            if ($blRecord) {
+                $reason = !empty($blRecord['reason']) ? $blRecord['reason'] : '触发系统安全规则';
+                return ['success' => false, 'message' => "访问受限：设备或IP已被云端封禁 ({$reason})"];
+            }
 
             if (empty($appKey)) return ['success' => false, 'message' => '鉴权失败：未提供AppKey'];
 
@@ -213,7 +246,6 @@ if (!class_exists('Database')) {
             $currentAppId = $app['id'];
             $appNameForLog = $app['app_name'];
 
-            // 1. 检查 active_devices
             $deviceStmt = $this->pdo->prepare("SELECT * FROM active_devices WHERE device_hash = ? AND status = 1 AND expire_time > NOW() AND app_id = ?");
             $deviceStmt->execute([$deviceHash, $currentAppId]);
             $activeInfo = $deviceStmt->fetch(PDO::FETCH_ASSOC);
@@ -237,7 +269,6 @@ if (!class_exists('Database')) {
                 }
             }
             
-            // 2. 检查卡密表
             $cardStmt = $this->pdo->prepare("SELECT * FROM cards WHERE card_code = ? AND app_id = ?");
             $cardStmt->execute([$cardCode, $currentAppId]);
             $card = $cardStmt->fetch(PDO::FETCH_ASSOC);
@@ -352,6 +383,25 @@ if (!class_exists('Database')) {
                 return count($codes); 
             } catch (Exception $e) { $this->pdo->rollBack(); return 0; } 
         }
+
+        public function batchSubTime($ids, $hours) { 
+            if (empty($ids) || $hours <= 0) return 0; 
+            $seconds = intval($hours * 3600); 
+            $placeholders = implode(',', array_fill(0, count($ids), '?')); 
+            $this->pdo->beginTransaction(); 
+            try { 
+                $stmt = $this->pdo->prepare("SELECT card_code FROM cards WHERE id IN ($placeholders) AND status = 1"); 
+                $stmt->execute($ids); 
+                $codes = $stmt->fetchAll(PDO::FETCH_COLUMN); 
+                if($codes) { 
+                    $codePlaceholders = implode(',', array_fill(0, count($codes), '?')); 
+                    $this->pdo->prepare("UPDATE cards SET expire_time = DATE_SUB(expire_time, INTERVAL {$seconds} SECOND) WHERE id IN ($placeholders) AND status = 1")->execute($ids); 
+                    $this->pdo->prepare("UPDATE active_devices SET expire_time = DATE_SUB(expire_time, INTERVAL {$seconds} SECOND) WHERE card_code IN ($codePlaceholders)")->execute($codes); 
+                } 
+                $this->pdo->commit(); 
+                return count($codes); 
+            } catch (Exception $e) { $this->pdo->rollBack(); return 0; } 
+        }
         
         public function getCardsByIds($ids) { if(empty($ids)) return []; $placeholders = implode(',', array_fill(0, count($ids), '?')); $stmt = $this->pdo->prepare("SELECT * FROM cards WHERE id IN ($placeholders)"); $stmt->execute($ids); return $stmt->fetchAll(PDO::FETCH_ASSOC); }
         public function resetDeviceBindingByCardId($id) { return $this->batchUnbindCards([$id]); }
@@ -382,7 +432,6 @@ if (!class_exists('Database')) {
             return ['stats' => ['total' => $total, 'unused' => $unused, 'used' => $used, 'active' => $active], 'chart_types' => $types, 'app_stats' => $appStats]; 
         }
         
-        // --- 修复: 增加 typeFilter 参数 ---
         public function getTotalCardCount($statusFilter = null, $appId = null, $typeFilter = null) {
             $sql = "SELECT COUNT(*) FROM cards WHERE app_id > 0";
             $params = [];
@@ -395,7 +444,6 @@ if (!class_exists('Database')) {
             return $stmt->fetchColumn();
         }
         
-        // --- 修复: 增加 typeFilter 参数 ---
         public function getCardsPaginated($limit, $offset, $statusFilter = null, $appId = null, $typeFilter = null) {
             $sql = "SELECT T1.*, T2.app_name FROM cards T1 JOIN applications T2 ON T1.app_id = T2.id WHERE 1=1 ";
             if ($statusFilter !== null) $sql .= "AND T1.status = :status ";
@@ -459,6 +507,54 @@ if (!class_exists('Database')) {
                 $str .= $keyspace[random_int(0, $max)];
             }
             return $str;
+        }
+
+        // ==========================================
+        // [新增] 完美系统迁移功能 - 导出与导入
+        // ==========================================
+        public function exportAllData() {
+            $tables = ['applications', 'app_variables', 'cards', 'active_devices', 'usage_logs', 'blacklists', 'system_settings', 'admin'];
+            $data = [];
+            foreach ($tables as $table) {
+                try {
+                    $stmt = $this->pdo->query("SELECT * FROM {$table}");
+                    $data[$table] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                } catch (Exception $e) {}
+            }
+            return $data;
+        }
+
+        public function importAllData($data) {
+            $tables = ['applications', 'app_variables', 'cards', 'active_devices', 'usage_logs', 'blacklists', 'system_settings', 'admin'];
+            $this->pdo->beginTransaction();
+            try {
+                $this->pdo->exec("SET FOREIGN_KEY_CHECKS=0");
+                foreach ($tables as $table) {
+                    if (isset($data[$table]) && is_array($data[$table])) {
+                        $this->pdo->exec("TRUNCATE TABLE {$table}");
+                        if (!empty($data[$table])) {
+                            $columns = array_keys($data[$table][0]);
+                            $colStr = implode(',', array_map(function($c){ return "`$c`"; }, $columns));
+                            $placeholders = implode(',', array_fill(0, count($columns), '?'));
+                            $sql = "INSERT INTO {$table} ({$colStr}) VALUES ({$placeholders})";
+                            $stmt = $this->pdo->prepare($sql);
+                            foreach ($data[$table] as $row) {
+                                $values = [];
+                                foreach ($columns as $col) {
+                                    $values[] = $row[$col];
+                                }
+                                $stmt->execute($values);
+                            }
+                        }
+                    }
+                }
+                $this->pdo->exec("SET FOREIGN_KEY_CHECKS=1");
+                $this->pdo->commit();
+                return true;
+            } catch (Exception $e) {
+                $this->pdo->rollBack();
+                throw $e;
+            }
         }
     }
 }

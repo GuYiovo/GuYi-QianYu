@@ -64,8 +64,9 @@ $env_ok = !in_array(false, array_column($env, 'ok'));
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
-            --glass-bg: rgba(255, 255, 255, 0.02);
-            --glass-border: rgba(255, 255, 255, 0.08);
+            /* 极致透明的核心参数 */
+            --glass-bg: rgba(255, 255, 255, 0.02); /* 极低的底色 */
+            --glass-border: rgba(255, 255, 255, 0.08); /* 极细若隐若现的边框 */
             
             --text-main: rgba(255, 255, 255, 0.95);
             --text-dim: rgba(255, 255, 255, 0.5);
@@ -87,14 +88,16 @@ $env_ok = !in_array(false, array_column($env, 'ok'));
             -webkit-font-smoothing: antialiased;
         }
 
+        /* 全屏背景图 */
         .bg-layer {
             position: fixed;
             inset: 0;
             background: url('<?php echo $bg_url; ?>') center/cover no-repeat;
             z-index: -1;
-            transform: scale(1.05);
+            transform: scale(1.05); /* 缓冲边缘缩放 */
         }
         
+        /* 增加微小的暗色渐变，确保浅色背景下图文依然可读 */
         .bg-layer::after {
             content: '';
             position: absolute;
@@ -102,22 +105,25 @@ $env_ok = !in_array(false, array_column($env, 'ok'));
             background: radial-gradient(circle at center, rgba(0,0,0,0) 0%, rgba(0,0,0,0.15) 100%);
         }
 
+        /* 极致透明玻璃体 */
         .glass-card {
             width: 420px;
             max-width: 90%;
             background: var(--glass-bg);
+            /* 低模糊度 (8px)，背景清晰穿透 */
             backdrop-filter: blur(8px) saturate(120%);
             -webkit-backdrop-filter: blur(8px) saturate(120%);
             border: 1px solid var(--glass-border);
             border-radius: 28px;
             box-shadow: 
-                0 20px 40px rgba(0, 0, 0, 0.2),
-                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+                0 20px 40px rgba(0, 0, 0, 0.2), /* 柔和的外阴影 */
+                inset 0 1px 0 rgba(255, 255, 255, 0.1); /* 顶部的微光反射 */
             padding: 36px;
             position: relative;
             z-index: 10;
         }
 
+        /* 顶部与步骤条 */
         header { text-align: center; margin-bottom: 28px; }
         .logo { font-size: 22px; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 8px; }
         .step-indicator {
@@ -134,15 +140,17 @@ $env_ok = !in_array(false, array_column($env, 'ok'));
         .dot.active { background: var(--accent); transform: scale(1.6); box-shadow: 0 0 8px rgba(255,255,255,0.4); }
         .dot.done { background: rgba(255,255,255,0.6); }
 
+        /* 排版 */
         h1 { font-size: 18px; font-weight: 600; text-align: center; margin-bottom: 6px; letter-spacing: 0.5px; }
         .subtitle { font-size: 12px; color: var(--text-dim); text-align: center; margin-bottom: 24px; }
 
+        /* 表单输入区（全透明质感） */
         .form-group { margin-bottom: 14px; position: relative; }
         .input-row { display: flex; gap: 10px; }
         
         input {
             width: 100%;
-            background: rgba(255, 255, 255, 0.02);
+            background: rgba(255, 255, 255, 0.02); /* 近乎透明 */
             border: 1px solid rgba(255, 255, 255, 0.06);
             border-radius: 12px;
             padding: 13px 16px;
@@ -159,6 +167,21 @@ $env_ok = !in_array(false, array_column($env, 'ok'));
         }
         input::placeholder { color: rgba(255, 255, 255, 0.25); font-size: 13px; }
 
+        /* 新增：小眼睛图标样式 */
+        .toggle-password {
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: rgba(255, 255, 255, 0.3);
+            cursor: pointer;
+            transition: color 0.3s;
+            font-size: 14px;
+        }
+        .toggle-password:hover { color: rgba(255, 255, 255, 0.8); }
+        .has-eye { padding-right: 40px; } /* 防止文字被小眼睛挡住 */
+
+        /* 环境检测列表 */
         .env-item {
             display: flex;
             align-items: center;
@@ -176,6 +199,7 @@ $env_ok = !in_array(false, array_column($env, 'ok'));
         .status-ok { color: var(--success); }
         .status-no { color: var(--error); }
 
+        /* 半透明发光按钮 */
         .btn {
             width: 100%;
             background: rgba(255, 255, 255, 0.1);
@@ -201,6 +225,7 @@ $env_ok = !in_array(false, array_column($env, 'ok'));
         .btn:active { transform: translateY(1px); }
         .btn:disabled { background: rgba(255,255,255,0.03); border-color: transparent; color: rgba(255,255,255,0.2); cursor: not-allowed; transform: none; box-shadow: none; }
 
+        /* 警告框 */
         .alert {
             background: rgba(248, 113, 113, 0.08);
             border: 1px solid rgba(248, 113, 113, 0.15);
@@ -212,6 +237,7 @@ $env_ok = !in_array(false, array_column($env, 'ok'));
             margin-bottom: 20px;
         }
 
+        /* 完成页样式 */
         .success-icon {
             width: 56px; height: 56px;
             background: rgba(52, 211, 153, 0.1);
@@ -234,6 +260,7 @@ $env_ok = !in_array(false, array_column($env, 'ok'));
         .credential-box i { width: 16px; text-align: center; margin-right: 6px; opacity: 0.7; }
         .credential-box code { color: #fff; background: rgba(255,255,255,0.08); padding: 3px 6px; border-radius: 4px; font-family: monospace; letter-spacing: 0.5px; }
 
+        /* 移动端细微调整 */
         @media (max-width: 480px) {
             .glass-card { padding: 30px 20px; width: 92%; border-radius: 24px; }
             .input-row { flex-direction: column; gap: 14px; }
@@ -260,7 +287,7 @@ $env_ok = !in_array(false, array_column($env, 'ok'));
 
     <?php if($step == 1): ?>
         <h1>环境检测</h1>
-        <p class="subtitle"><?=base64_decode('5L2c6ICFIEd1WWnvvJoxNTY0NDAwMDAgfCDpgq7nrrHvvJprYXJhY3NvbnllcmlrNTk0QGdtYWlsLmNvbQ==')?></p>
+        <p class="subtitle">检查服务器运行环境是否就绪</p>
         
         <div class="env-list">
             <?php foreach($env as $it): ?>
@@ -279,7 +306,7 @@ $env_ok = !in_array(false, array_column($env, 'ok'));
 
     <?php elseif($step == 2): ?>
         <h1>系统配置</h1>
-        <p class="subtitle"><?=base64_decode('5L2c6ICFIEd1WWnvvJoxNTY0NDAwMDAgfCDpgq7nrrHvvJprYXJhY3NvbnllcmlrNTk0QGdtYWlsLmNvbQ==')?></p>
+        <p class="subtitle">配置数据库与管理员账号</p>
         
         <form method="POST" action="?step=3">
             <div class="form-group">
@@ -300,17 +327,21 @@ $env_ok = !in_array(false, array_column($env, 'ok'));
                     <input type="text" name="db_user" placeholder="数据库用户名" required>
                 </div>
                 <div class="form-group">
-                    <input type="password" name="db_pass" placeholder="数据库密码">
+                    <input type="password" name="db_pass" class="has-eye" placeholder="数据库密码">
+                    <i class="fas fa-eye-slash toggle-password"></i>
                 </div>
             </div>
 
+            <!-- 超透明分割线 -->
             <div style="height: 1px; background: rgba(255,255,255,0.05); margin: 14px 0 20px;"></div>
 
             <div class="form-group">
-                <input type="password" name="admin_password" placeholder="设置管理员密码 (至少 6 位)" minlength="6" required>
+                <input type="password" name="admin_password" class="has-eye" placeholder="设置管理员密码 (至少 6 位)" minlength="6" required>
+                <i class="fas fa-eye-slash toggle-password"></i>
             </div>
             <div class="form-group">
-                <input type="password" name="admin_password_confirm" placeholder="再次确认管理员密码" minlength="6" required>
+                <input type="password" name="admin_password_confirm" class="has-eye" placeholder="再次确认管理员密码" minlength="6" required>
+                <i class="fas fa-eye-slash toggle-password"></i>
             </div>
 
             <button type="submit" class="btn">立即安装</button>
@@ -325,8 +356,7 @@ $env_ok = !in_array(false, array_column($env, 'ok'));
             <p><i class="fas fa-user"></i> 管理员账号：<code>GuYi</code></p>
             <p><i class="fas fa-lock"></i> 登录密码：<code>********</code> (您刚刚设置的密码)</p>
             <p style="margin-top: 12px; font-size: 11px; opacity: 0.5; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px;">
-                <i class="fas fa-shield-halved"></i> 安全提示：安装文件 install.php 已自动销毁。<br>
-                <?=base64_decode('5L2c6ICFIEd1WWnvvJoxNTY0NDAwMDAg6YKu566x77yaa2FyYWNzb255ZXJpazU5NEBnbWFpbC5jb20=')?>
+                <i class="fas fa-shield-halved"></i> 安全提示：安装文件 install.php 已自动销毁。
             </p>
         </div>
 
@@ -334,5 +364,28 @@ $env_ok = !in_array(false, array_column($env, 'ok'));
     <?php endif; ?>
 </div>
 
+<!-- 新增：显示/隐藏密码逻辑 -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const toggleIcons = document.querySelectorAll('.toggle-password');
+    
+    toggleIcons.forEach(function(icon) {
+        icon.addEventListener('click', function() {
+            // 获取同级的前一个元素（也就是 input 框）
+            const input = this.previousElementSibling;
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                this.classList.remove('fa-eye-slash');
+                this.classList.add('fa-eye');
+            } else {
+                input.type = 'password';
+                this.classList.remove('fa-eye');
+                this.classList.add('fa-eye-slash');
+            }
+        });
+    });
+});
+</script>
 </body>
 </html>
